@@ -165,3 +165,20 @@ TArray<FOtherWindowInfo> UWindowTransparencyBPL::GetOtherWindowsInfo(bool& bSucc
 #endif
     return TArray<FOtherWindowInfo>();
 }
+
+void UWindowTransparencyBPL::SetWindowAsDesktopBackground(bool bEnable)
+{
+#if PLATFORM_WINDOWS
+    UWindowTransparencyHelper* Helper = FWindowTransparencyModule::GetHelper();
+    if (Helper)
+    {
+        Helper->SetAsDesktopBackground(bEnable);
+    }
+    else
+    {
+        UE_LOG(LogWindowBPL, Warning, TEXT("SetWindowAsDesktopBackground: Could not get WindowTransparencyHelper instance. System may not be available."));
+    }
+#else
+    UE_LOG(LogWindowBPL, Log, TEXT("SetWindowAsDesktopBackground: Window Transparency features are not supported on this platform."));
+#endif
+}

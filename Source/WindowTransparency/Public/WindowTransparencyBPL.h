@@ -73,4 +73,12 @@ public:
      */
     UFUNCTION(BlueprintCallable, Category = "Window Transparency|External Windows", meta = (DisplayName = "Get Other Windows Info"))
     static TArray<FOtherWindowInfo> GetOtherWindowsInfo(bool& bSuccess);
+
+    /**
+     * Sets or unsets the game window as a desktop background.
+     * When set, the window will be parented to the desktop's WorkerW, made borderless and click-through.
+     * @param bEnable True to set as desktop background, false to restore.
+     */
+    UFUNCTION(BlueprintCallable, Category = "Window Transparency", meta = (DisplayName = "Set Window As Desktop Background"))
+    static void SetWindowAsDesktopBackground(bool bEnable);
 };

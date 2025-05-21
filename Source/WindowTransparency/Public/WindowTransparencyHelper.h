@@ -45,6 +45,9 @@ struct WINDOWTRANSPARENCY_API FOtherWindowInfo
     UPROPERTY(BlueprintReadOnly, Category = "Window Info")
     int32 Height;
 
+    UPROPERTY(BlueprintReadOnly, Category = "Window Info")
+    FString WindowHandleStr;
+
     FOtherWindowInfo() : PosX(0), PosY(0), Width(0), Height(0) {}
 };
 
@@ -66,6 +69,7 @@ public:
     FVector2D GetMousePositionInWindow(bool& bSuccess);
     void RestoreDefaultWindowSettings();
     bool IsInitialized() const { return bIsInitialized; }
+    void SetAsDesktopBackground(bool bEnable);
 
 #if PLATFORM_WINDOWS
     HWND GetGameHWnd() const;
@@ -102,6 +106,15 @@ private:
     LONG_PTR OriginalWindowStyle;
     LONG_PTR OriginalExWindowStyle;
     bool bOriginalStylesStored;
+    HWND DefaultParentHwnd;       // プラグイン初期化時の親ウィンドウハンドル
+    bool bIsDesktopBackgroundActive; // 現在デスクトップ背景モードか
+    HWND TrueOriginalParentHwnd;
+    LONG_PTR TrueOriginalWindowStyle;
+    LONG_PTR TrueOriginalExWindowStyle;
+    bool bTrueOriginalStateStored;
+
+    HWND CurrentWorkerW;
+    TWeakPtr<SWindow> GameSWindowPtr;
 
     struct EnumWindowsCallbackData
     {
@@ -109,6 +122,7 @@ private:
         HWND SelfHWnd;
     };
     static BOOL CALLBACK EnumWindowsProc(HWND hwnd, LPARAM lParam);
+    HWND FindTargetWorkerW();
 #endif
 
     bool bHitTestingGloballyEnabled;

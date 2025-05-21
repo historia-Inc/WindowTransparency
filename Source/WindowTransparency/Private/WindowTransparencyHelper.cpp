@@ -49,10 +49,17 @@ UWindowTransparencyHelper::UWindowTransparencyHelper()
     , OriginalWindowStyle(0)
     , OriginalExWindowStyle(0)
     , bOriginalStylesStored(false)
+    , DefaultParentHwnd(nullptr)
+    , bIsDesktopBackgroundActive(false)
+    , CurrentWorkerW(nullptr)
+    , TrueOriginalParentHwnd(nullptr)
+    , TrueOriginalWindowStyle(0)
+    , TrueOriginalExWindowStyle(0)
+    , bTrueOriginalStateStored(false)
 #endif
     , bHitTestingGloballyEnabled(false)
     , CurrentHitTestTypeLogic(EWindowHitTestType::None)
-    , GameRaycastTraceChannelLogic(ECollisionChannel::ECC_Visibility) // Default trace channel
+    , GameRaycastTraceChannelLogic(ECollisionChannel::ECC_Visibility)
     , bIsMouseOverOpaqueAreaLogic(true)
     , bCanHelperTick(false)
 {
@@ -65,12 +72,26 @@ UWindowTransparencyHelper::~UWindowTransparencyHelper()
 #if PLATFORM_WINDOWS
 HWND UWindowTransparencyHelper::GetGameHWnd() const
 {
+    // 保持している SWindow から優先的に取得
+    if (GameSWindowPtr.IsValid()) {
+        TSharedPtr<SWindow> StrongSWindow = GameSWindowPtr.Pin();
+        if (StrongSWindow.IsValid() && StrongSWindow->GetNativeWindow().IsValid()) {
+            void* Handle = StrongSWindow->GetNativeWindow()->GetOSWindowHandle();
+            UE_LOG(LogWindowHelper, Verbose, TEXT("GetGameHWnd: Returning HWND from cached GameSWindowPtr: %p"), Handle);
+            return static_cast<HWND>(Handle);
+        }
+    }
+
+    // SWindow が無効なら従来のロジックで取得し、キャッシュも試みる
     if (GEngine && GEngine->GameViewport && GEngine->GameViewport->GetWindow().IsValid())
     {
         TSharedPtr<SWindow> GameSWindow = GEngine->GameViewport->GetWindow();
+        // const_cast は通常避けるべきだが、ここではメンバ変数を更新するために一時的に使用
+        const_cast<UWindowTransparencyHelper*>(this)->GameSWindowPtr = GameSWindow;
         if (GameSWindow.IsValid() && GameSWindow->GetNativeWindow().IsValid())
         {
             void* Handle = GameSWindow->GetNativeWindow()->GetOSWindowHandle();
+            UE_LOG(LogWindowHelper, Verbose, TEXT("GetGameHWnd: Returning HWND from GEngine->GameViewport and caching SWindow: %p"), Handle);
             return static_cast<HWND>(Handle);
         }
     }
@@ -79,7 +100,10 @@ HWND UWindowTransparencyHelper::GetGameHWnd() const
         TSharedPtr<SWindow> ActiveWindow = FSlateApplication::Get().GetActiveTopLevelWindow();
         if (ActiveWindow.IsValid() && ActiveWindow->GetNativeWindow().IsValid())
         {
+            // これがゲームウィンドウである保証は薄いが、フォールバックとして
+            // const_cast<UWindowTransparencyHelper*>(this)->GameSWindowPtr = ActiveWindow; // トップレベルなのでキャッシュ対象としては微妙
             void* Handle = ActiveWindow->GetNativeWindow()->GetOSWindowHandle();
+            UE_LOG(LogWindowHelper, Verbose, TEXT("GetGameHWnd: Returning HWND from GetActiveTopLevelWindow (fallback): %p"), Handle);
             return static_cast<HWND>(Handle);
         }
     }
@@ -148,6 +172,7 @@ BOOL CALLBACK UWindowTransparencyHelper::EnumWindowsProc(HWND hwnd, LPARAM lPara
     TCHAR WindowTitleRaw[256]; // TCHAR for wider compatibility with GetWindowText
     GetWindowText(hwnd, WindowTitleRaw, sizeof(WindowTitleRaw) / sizeof(TCHAR));
     Info.WindowTitle = FString(WindowTitleRaw);
+    Info.WindowHandleStr = FString::Printf(TEXT("%llu"), reinterpret_cast<uint64>(hwnd));
 
     RECT Rect;
     if (GetWindowRect(hwnd, &Rect))
@@ -201,12 +226,22 @@ TArray<FOtherWindowInfo> UWindowTransparencyHelper::GetOtherWindowsInformation(b
 void UWindowTransparencyHelper::StoreOriginalWindowStyles()
 {
 #if PLATFORM_WINDOWS
-    if (GameHWnd && !bOriginalStylesStored)
+    if (GameHWnd && !bOriginalStylesStored) // 通常の bOriginalStylesStored をまずチェック
     {
         OriginalWindowStyle = GetWindowLongPtr(GameHWnd, GWL_STYLE);
         OriginalExWindowStyle = GetWindowLongPtr(GameHWnd, GWL_EXSTYLE);
         bOriginalStylesStored = true;
-        UE_LOG(LogWindowHelper, Log, TEXT("Stored original window styles. Style: 0x%p, ExStyle: 0x%p"), (void*)OriginalWindowStyle, (void*)OriginalExWindowStyle);
+        UE_LOG(LogWindowHelper, Log, TEXT("Stored current window styles. Style: 0x%p, ExStyle: 0x%p"), (void*)OriginalWindowStyle, (void*)OriginalExWindowStyle);
+
+        // 真のオリジナルスタイルがまだ保存されていなければ、現在のスタイルを真のオリジナルとして保存
+        if (!bTrueOriginalStateStored)
+        {
+            TrueOriginalWindowStyle = OriginalWindowStyle;
+            TrueOriginalExWindowStyle = OriginalExWindowStyle;
+            // TrueOriginalParentHwnd は Initialize で設定済みのはず
+            bTrueOriginalStateStored = true;
+            UE_LOG(LogWindowHelper, Log, TEXT("Stored TRUE original window styles from current. Style: 0x%p, ExStyle: 0x%p"), (void*)TrueOriginalWindowStyle, (void*)TrueOriginalExWindowStyle);
+        }
     }
 #endif
 }
@@ -214,10 +249,52 @@ void UWindowTransparencyHelper::StoreOriginalWindowStyles()
 void UWindowTransparencyHelper::ReInitializeIfNeeded()
 {
 #if PLATFORM_WINDOWS
-    if (!GameHWnd || (GameHWnd && !IsWindow(GameHWnd)))
+    if (bIsDesktopBackgroundActive)
     {
-        UE_LOG(LogWindowHelper, Log, TEXT("ReInitializeIfNeeded: GameHWnd %p is invalid or null. Attempting to re-initialize."), GameHWnd);
+        // デスクトップ背景モード中は、GameHWnd の生存確認のみ行う
+        if (!GameHWnd || !IsWindow(GameHWnd))
+        {
+            UE_LOG(LogWindowHelper, Error, TEXT("ReInitializeIfNeeded: GameHWnd (%p) became invalid during Desktop Background mode! Forcing mode disable and full re-init."), GameHWnd);
+
+            // バックグラウンドモード関連のフラグをリセット
+            bIsDesktopBackgroundActive = false;
+            CurrentWorkerW = nullptr;
+            // GameHWnd が無効なので、親ウィンドウやスタイルを安全に戻せない可能性がある
+            // 強制的にフラグを落とし、通常の再初期化フローへ
+            GameHWnd = nullptr;
+            GameSWindowPtr.Reset();
+            bIsInitialized = false;
+            bOriginalStylesStored = false; // これにより Initialize で Original~ が再取得される
+            bCanHelperTick = false;
+            Initialize(); // 通常の Initialize を試みる
+        }
+        // GameHWnd が有効なら、SWindow 関連の不整合は許容し、再初期化しない
+        return;
+    }
+
+    // 通常の再初期化ロジック (変更なし)
+    bool bNeedsReinit = false;
+    if (!GameHWnd || (GameHWnd && !IsWindow(GameHWnd))) {
+        UE_LOG(LogWindowHelper, Log, TEXT("ReInitializeIfNeeded: GameHWnd %p is invalid or null."), GameHWnd);
+        bNeedsReinit = true;
+    }
+    if (!GameSWindowPtr.IsValid()) {
+        UE_LOG(LogWindowHelper, Log, TEXT("ReInitializeIfNeeded: GameSWindowPtr is invalid."));
+        bNeedsReinit = true;
+    }
+    else {
+        TSharedPtr<SWindow> StrongSWindow = GameSWindowPtr.Pin();
+        if (!StrongSWindow.IsValid() || !StrongSWindow->GetNativeWindow().IsValid() ||
+            (GameHWnd && StrongSWindow->GetNativeWindow()->GetOSWindowHandle() != GameHWnd)) {
+            UE_LOG(LogWindowHelper, Log, TEXT("ReInitializeIfNeeded: GameSWindowPtr valid but native window invalid or HWND mismatch."));
+            bNeedsReinit = true;
+        }
+    }
+
+    if (bNeedsReinit) {
+        UE_LOG(LogWindowHelper, Log, TEXT("ReInitializeIfNeeded: Attempting to re-initialize all window handles and states (not in desktop background mode)."));
         GameHWnd = nullptr;
+        GameSWindowPtr.Reset();
         bIsInitialized = false;
         bOriginalStylesStored = false;
         bCanHelperTick = false;
@@ -229,20 +306,51 @@ void UWindowTransparencyHelper::ReInitializeIfNeeded()
 bool UWindowTransparencyHelper::Initialize()
 {
 #if PLATFORM_WINDOWS
-    if (bIsInitialized && GameHWnd && IsWindow(GameHWnd))
+    if (bIsInitialized && GameHWnd && IsWindow(GameHWnd) && !bIsDesktopBackgroundActive) // デスクトップ背景モード中は再評価が必要な場合がある
     {
         return true;
     }
 
-    GameHWnd = GetGameHWnd();
-    if (GameHWnd)
+    if (GEngine && GEngine->GameViewport && GEngine->GameViewport->GetWindow().IsValid()) {
+        GameSWindowPtr = GEngine->GameViewport->GetWindow();
+    }
+
+    HWND TempHWnd = GetGameHWnd();
+    if (TempHWnd)
     {
+        GameHWnd = TempHWnd; // GameHWnd を設定
         bIsInitialized = true;
-        StoreOriginalWindowStyles();
+
+        if (!bTrueOriginalStateStored) // まだ真のオリジナルが保存されていなければ
+        {
+            TrueOriginalWindowStyle = GetWindowLongPtr(GameHWnd, GWL_STYLE);
+            TrueOriginalExWindowStyle = GetWindowLongPtr(GameHWnd, GWL_EXSTYLE);
+            TrueOriginalParentHwnd = ::GetParent(GameHWnd);
+            bTrueOriginalStateStored = true;
+            UE_LOG(LogWindowHelper, Log, TEXT("Stored TRUE original state. Parent: %p, Style: 0x%p, ExStyle: 0x%p"),
+                TrueOriginalParentHwnd, (void*)TrueOriginalWindowStyle, (void*)TrueOriginalExWindowStyle);
+
+            // 通常のOriginalもこれで初期化
+            OriginalWindowStyle = TrueOriginalWindowStyle;
+            OriginalExWindowStyle = TrueOriginalExWindowStyle;
+            DefaultParentHwnd = TrueOriginalParentHwnd;
+            bOriginalStylesStored = true; // これも true に
+        }
+        else if (!bOriginalStylesStored && !bIsDesktopBackgroundActive)
+        {
+            // TrueOriginalは保存済みだが、Originalが未保存で、デスクトップ背景モードでない場合
+            // (例: デスクトップ背景解除後の再初期化など)
+            OriginalWindowStyle = GetWindowLongPtr(GameHWnd, GWL_STYLE);
+            OriginalExWindowStyle = GetWindowLongPtr(GameHWnd, GWL_EXSTYLE);
+            DefaultParentHwnd = ::GetParent(GameHWnd);
+            bOriginalStylesStored = true;
+        }
+
         LONG_PTR CurrentExStyle = GetWindowLongPtr(GameHWnd, GWL_EXSTYLE);
         bIsClickThroughStateOS = (CurrentExStyle & WS_EX_TRANSPARENT) != 0;
         bCanHelperTick = true;
-        UE_LOG(LogWindowHelper, Log, TEXT("WindowTransparencyHelper Initialized with HWND: %p. Initial OS ClickThrough: %s"), GameHWnd, bIsClickThroughStateOS ? TEXT("true") : TEXT("false"));
+        UE_LOG(LogWindowHelper, Log, TEXT("WindowTransparencyHelper Initialized. GameHWnd: %p, GameSWindow valid: %s, Current Parent: %p."),
+            GameHWnd, GameSWindowPtr.IsValid() ? TEXT("true") : TEXT("false"), ::GetParent(GameHWnd));
         return true;
     }
     else
@@ -575,6 +683,9 @@ TStatId UWindowTransparencyHelper::GetStatId() const
 void UWindowTransparencyHelper::Tick(float DeltaTime)
 {
 #if PLATFORM_WINDOWS
+    if (bIsDesktopBackgroundActive) {
+        return;
+    }
     if (!bCanHelperTick || !bIsInitialized || !GameHWnd || !IsWindow(GameHWnd))
     {
         ReInitializeIfNeeded();
@@ -583,6 +694,7 @@ void UWindowTransparencyHelper::Tick(float DeltaTime)
             return;
         }
     }
+
 #else
     if (!bCanHelperTick || !bIsInitialized)
     {
@@ -770,4 +882,249 @@ bool UWindowTransparencyHelper::PerformGameRaycastUnderMouse(FVector2D MousePosI
     FString ChannelName = EnumPtr ? EnumPtr->GetNameStringByValue(static_cast<int64>(this->GameRaycastTraceChannelLogic)) : FString::FromInt(static_cast<int32>(this->GameRaycastTraceChannelLogic));
     UE_LOG(LogWindowHelper, Verbose, TEXT("GameRaycastTest: No blocking hit found on 3D (using Channel %s) or UI. Assuming transparent."), *ChannelName);
     return false;
+}
+
+#if PLATFORM_WINDOWS
+// Helper struct for EnumWindowsProcWorkerW
+struct WorkerWEnumData {
+    HWND WorkerW_Handle = nullptr;
+    HWND Progman_Handle = nullptr;
+    int MonitorCount = 0; // マルチモニター対応のためのヒント
+};
+
+// Callback for EnumWindows to find the correct WorkerW
+static BOOL CALLBACK EnumWindowsProcFindWorkerW(HWND hwnd, LPARAM lParam)
+{
+    WorkerWEnumData* pData = reinterpret_cast<WorkerWEnumData*>(lParam);
+    WCHAR className[256];
+    WCHAR windowTitle[256]; // デバッグ用
+
+    if (GetClassNameW(hwnd, className, sizeof(className) / sizeof(WCHAR)) && wcscmp(className, L"WorkerW") == 0)
+    {
+        GetWindowText(hwnd, windowTitle, sizeof(windowTitle) / sizeof(WCHAR)); // デバッグ用
+        bool bIsVisible = IsWindowVisible(hwnd);
+        HWND parentHwnd = GetParent(hwnd);
+        RECT rcClient;
+        GetClientRect(hwnd, &rcClient); // クライアント領域のサイズを取得
+
+
+        // SHELLDLL_DefView を子に持つか確認 (これを持つものはアイコン表示用なので除外)
+        HWND defView = FindWindowEx(hwnd, NULL, L"SHELLDLL_DefView", NULL);
+        if (defView == NULL)
+        {
+            UE_LOG(LogWindowHelper, Log, TEXT("  - WorkerW %p does NOT have SHELLDLL_DefView child. Candidate."), hwnd);
+
+            // 条件1: 表示されている (IsWindowVisible が true)
+            // 条件2: クライアント領域が妥当なサイズ (幅 > 0 かつ 高さ > 0)
+            // 条件3: 親が Progman であるか、トップレベルウィンドウである
+            //        (一部環境では Progman の子ではなく、Progman の兄弟ウィンドウとして存在する)
+            if (bIsVisible && (rcClient.right - rcClient.left > 0) && (rcClient.bottom - rcClient.top > 0))
+            {
+                // マルチモニター環境では複数の WorkerW が存在する可能性がある。
+                // 通常はプライマリモニターに対応するものが使われるが、より確実なのは
+                // Progman と同じモニター上にある WorkerW を探すこと。
+                // ここでは簡略化のため、最初に見つかった条件を満たすものを採用。
+
+                pData->WorkerW_Handle = hwnd;
+                UE_LOG(LogWindowHelper, Log, TEXT("  - WorkerW %p SELECTED as target (Visible, Valid Size, No DefView)."), hwnd);
+                return false; // 発見したので列挙を停止
+            }
+            else
+            {
+                FString skipReason;
+                if (!bIsVisible) skipReason += TEXT("NotVisible; ");
+                if (rcClient.right - rcClient.left <= 0) skipReason += TEXT("ZeroWidth; ");
+                if (rcClient.bottom - rcClient.top <= 0) skipReason += TEXT("ZeroHeight; ");
+                UE_LOG(LogWindowHelper, Log, TEXT("  - WorkerW %p (No DefView) SKIPPED. Reason: %s"), hwnd, *skipReason);
+            }
+        }
+        else
+        {
+            UE_LOG(LogWindowHelper, Log, TEXT("  - WorkerW %p HAS SHELLDLL_DefView child (%p). Skipping."), hwnd, defView);
+        }
+    }
+    return true; // 列挙を続行
+}
+
+HWND UWindowTransparencyHelper::FindTargetWorkerW()
+{
+    HWND progman = FindWindowW(L"Progman", NULL);
+    if (!progman)
+    {
+        UE_LOG(LogWindowHelper, Warning, TEXT("FindTargetWorkerW: Progman window not found."));
+        return nullptr;
+    }
+    UE_LOG(LogWindowHelper, Log, TEXT("FindTargetWorkerW: Found Progman: %p"), progman);
+
+    ULONG_PTR result;
+    UE_LOG(LogWindowHelper, Log, TEXT("FindTargetWorkerW: Sending 0x052C message to Progman %p."), progman);
+    SendMessageTimeout(progman, 0x052C, 0x0000000D, 0, SMTO_NORMAL, 1000, &result);
+    SendMessageTimeout(progman, 0x052C, 0, 0, SMTO_NORMAL, 1000, &result);
+
+    // メッセージ送信後、WorkerWが準備されるのを少し待つ (荒療治だが効果がある場合がある)
+    // FPlatformProcess::Sleep(0.2f); // 200ms待機 -> いきなりSleepは避ける。まずはログで確認
+
+    WorkerWEnumData data;
+    data.WorkerW_Handle = nullptr;
+    data.Progman_Handle = progman;
+    data.MonitorCount = GetSystemMetrics(SM_CMONITORS); // 参考情報
+
+    UE_LOG(LogWindowHelper, Log, TEXT("FindTargetWorkerW: Strategy 1 - EnumWindows for top-level WorkerW. Monitor count: %d"), data.MonitorCount);
+    EnumWindows(EnumWindowsProcFindWorkerW, reinterpret_cast<LPARAM>(&data));
+
+    if (data.WorkerW_Handle)
+    {
+        UE_LOG(LogWindowHelper, Log, TEXT("FindTargetWorkerW: Strategy 1 - Found target WorkerW: %p"), data.WorkerW_Handle);
+        return data.WorkerW_Handle;
+    }
+
+    UE_LOG(LogWindowHelper, Warning, TEXT("FindTargetWorkerW: Strategy 1 failed. Strategy 2 - EnumChildWindows on Progman (%p)."), progman);
+    data.WorkerW_Handle = nullptr;
+    EnumChildWindows(progman, EnumWindowsProcFindWorkerW, reinterpret_cast<LPARAM>(&data));
+
+    if (data.WorkerW_Handle)
+    {
+        UE_LOG(LogWindowHelper, Log, TEXT("FindTargetWorkerW: Strategy 2 - Found target WorkerW (%p) as child of Progman."), data.WorkerW_Handle);
+        return data.WorkerW_Handle;
+    }
+
+    UE_LOG(LogWindowHelper, Error, TEXT("FindTargetWorkerW: All strategies failed. No suitable WorkerW found."));
+    return nullptr;
+}
+#endif // PLATFORM_WINDOWS
+
+void UWindowTransparencyHelper::SetAsDesktopBackground(bool bEnable)
+{
+#if PLATFORM_WINDOWS
+    if (bEnable)
+    {
+
+        if (!bIsInitialized || !GameHWnd || !IsWindow(GameHWnd)) {
+            UE_LOG(LogWindowHelper, Log, TEXT("SetAsDesktopBackground(Enable): Helper not initialized or GameHWnd invalid. Calling Initialize()."));
+            if (!Initialize()) {
+                UE_LOG(LogWindowHelper, Error, TEXT("SetAsDesktopBackground(Enable): Initialize() failed. Cannot proceed."));
+                return;
+            }
+        }
+
+        CurrentWorkerW = FindTargetWorkerW();
+        if (!CurrentWorkerW)
+        {
+            UE_LOG(LogWindowHelper, Error, TEXT("SetAsDesktopBackground: Failed to find WorkerW."));
+            return;
+        }
+
+        LONG_PTR DesktopBackgroundStyle = (GetWindowLongPtr(GameHWnd, GWL_STYLE) & ~(WS_CAPTION | WS_THICKFRAME | WS_SYSMENU)) | WS_POPUP;
+        if (!bIsBorderlessActive) { // まだボーダレスでなければ適用
+            SetWindowLongPtr(GameHWnd, GWL_STYLE, DesktopBackgroundStyle);
+        }
+
+
+        LONG_PTR CurrentExStyle = GetWindowLongPtr(GameHWnd, GWL_EXSTYLE);
+        SetWindowLongPtr(GameHWnd, GWL_EXSTYLE, CurrentExStyle | WS_EX_LAYERED | WS_EX_TRANSPARENT);
+        // SetWindowPos でスタイルの変更を適用
+        SetWindowPos(GameHWnd, NULL, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_FRAMECHANGED | SWP_NOACTIVATE);
+
+
+        UE_LOG(LogWindowHelper, Log, TEXT("SetAsDesktopBackground: About to call SetParent. GameHWnd: %p, WorkerW: %p"), GameHWnd, CurrentWorkerW);
+        if (::SetParent(GameHWnd, CurrentWorkerW) == NULL) {
+            DWORD lastError = GetLastError();
+            UE_LOG(LogWindowHelper, Error, TEXT("SetAsDesktopBackground: SetParent of GameHWnd %p to WorkerW %p failed. Error: %d."), GameHWnd, CurrentWorkerW, lastError);
+            // 親の設定に失敗した場合、スタイルを元に戻す試み
+            if (!bIsBorderlessActive) { // 元々ボーダレスでなかった場合のみ戻す
+                SetWindowLongPtr(GameHWnd, GWL_STYLE, GetWindowLongPtr(GameHWnd, GWL_STYLE) & ~WS_POPUP | (TrueOriginalWindowStyle & (WS_CAPTION | WS_THICKFRAME | WS_SYSMENU))); // 大まかな復元
+            }
+            SetWindowLongPtr(GameHWnd, GWL_EXSTYLE, CurrentExStyle); // SetParent 前の ExStyle に戻す
+            SetWindowPos(GameHWnd, NULL, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_FRAMECHANGED | SWP_NOACTIVATE);
+            CurrentWorkerW = nullptr;
+            return;
+        }
+        UE_LOG(LogWindowHelper, Log, TEXT("SetAsDesktopBackground: Successfully set parent of GameHWnd %p to WorkerW %p."), GameHWnd, CurrentWorkerW);
+
+        RECT rcWorker;
+        if (GetClientRect(CurrentWorkerW, &rcWorker))
+        {
+            if (rcWorker.right - rcWorker.left > 0 && rcWorker.bottom - rcWorker.top > 0) {
+                SetWindowPos(GameHWnd, NULL, rcWorker.left, rcWorker.top, rcWorker.right - rcWorker.left, rcWorker.bottom - rcWorker.top, SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
+            }
+            else { /* ... */ }
+        }
+        SetWindowPos(GameHWnd, HWND_BOTTOM, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+        // SetWindowTopmost(false); // HWND_BOTTOM にしているので不要、かつ Topmost 状態は TrueOriginalExStyle に基づくべき
+
+        bIsDesktopBackgroundActive = true;
+        // SWindowポインタは無効になっている可能性があるのでクリア
+        GameSWindowPtr.Reset();
+        bIsClickThroughStateOS = true; // OSレベルではクリックスルーにした
+
+        UE_LOG(LogWindowHelper, Log, TEXT("Window set as desktop background. GameHWnd: %p"), GameHWnd);
+    }
+    else // bEnable is false (デスクトップ背景モード解除)
+    {
+        if (!bIsDesktopBackgroundActive) return;
+
+        // GameHWnd が有効か確認。無効ならどうしようもない場合がある。
+        if (!GameHWnd || !IsWindow(GameHWnd)) {
+            UE_LOG(LogWindowHelper, Error, TEXT("SetAsDesktopBackground(Disable): GameHWnd is invalid. Cannot restore properly. Resetting flags."));
+            bIsDesktopBackgroundActive = false;
+            CurrentWorkerW = nullptr;
+            bIsInitialized = false; // 次のTickでReInitializeIfNeeded -> Initializeを促す
+            bOriginalStylesStored = false; // Original スタイルも再取得させる
+            return;
+        }
+
+        UE_LOG(LogWindowHelper, Log, TEXT("SetAsDesktopBackground: Disabling desktop background mode. GameHWnd for restore: %p"), GameHWnd);
+
+        // 親ウィンドウを「真の」初期の親に戻す
+        HWND TargetParent = bTrueOriginalStateStored ? TrueOriginalParentHwnd : NULL; // フォールバックでトップレベルに
+        if (::SetParent(GameHWnd, TargetParent) == NULL && TargetParent != NULL) {
+            // DefaultParentHwnd (おそらくNULL) へのSetParentが失敗した場合、最後の手段としてNULLを試す
+            if (::SetParent(GameHWnd, NULL) == NULL) { // トップレベルウィンドウに戻す
+                UE_LOG(LogWindowHelper, Error, TEXT("SetAsDesktopBackground(Disable): SetParent to TrueOriginalParentHwnd/NULL failed. Error: %d"), GetLastError());
+            }
+            else {
+                UE_LOG(LogWindowHelper, Log, TEXT("SetAsDesktopBackground(Disable): Restored parent to NULL (top-level)."));
+            }
+        }
+        else {
+            UE_LOG(LogWindowHelper, Log, TEXT("SetAsDesktopBackground(Disable): Restored parent to TrueOriginalParentHwnd: %p."), TargetParent);
+        }
+
+        // スタイルを「真の」初期スタイルに戻す
+        if (bTrueOriginalStateStored)
+        {
+            SetWindowLongPtr(GameHWnd, GWL_STYLE, TrueOriginalWindowStyle);
+            SetWindowLongPtr(GameHWnd, GWL_EXSTYLE, TrueOriginalExWindowStyle);
+            UE_LOG(LogWindowHelper, Log, TEXT("SetAsDesktopBackground(Disable): Restored TRUE original styles. Style: 0x%p, ExStyle: 0x%p"), (void*)TrueOriginalWindowStyle, (void*)TrueOriginalExWindowStyle);
+        }
+        else {
+            UE_LOG(LogWindowHelper, Warning, TEXT("SetAsDesktopBackground(Disable): True original styles not stored. Attempting restore with potentially current Original styles (if any)."));
+            if (bOriginalStylesStored) { // フォールバック
+                SetWindowLongPtr(GameHWnd, GWL_STYLE, OriginalWindowStyle);
+                SetWindowLongPtr(GameHWnd, GWL_EXSTYLE, OriginalExWindowStyle);
+            }
+        }
+        bIsClickThroughStateOS = (GetWindowLongPtr(GameHWnd, GWL_EXSTYLE) & WS_EX_TRANSPARENT) != 0;
+
+
+        SetWindowPos(GameHWnd, NULL, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_FRAMECHANGED | SWP_SHOWWINDOW); // SWP_SHOWWINDOW で表示を確実にする
+        InvalidateRect(GameHWnd, NULL, true);
+        UpdateWindow(GameHWnd);
+
+        bIsDesktopBackgroundActive = false;
+        CurrentWorkerW = nullptr;
+        bIsBorderlessActive = (GetWindowLongPtr(GameHWnd, GWL_STYLE) & WS_POPUP) != 0 && !((GetWindowLongPtr(GameHWnd, GWL_STYLE) & (WS_CAPTION | WS_THICKFRAME)));
+        bIsTopmostActive = (GetWindowLongPtr(GameHWnd, GWL_EXSTYLE) & WS_EX_TOPMOST) != 0; //Topmost状態を再評価
+
+
+        // 通常状態に戻ったので、Slate との関連を再確立するため再初期化を促す
+        bIsInitialized = false;
+        bOriginalStylesStored = false; // Initialize で Original~ を再取得させる
+        GameSWindowPtr.Reset();    // Slateウィンドウポインタもリセット
+        UE_LOG(LogWindowHelper, Log, TEXT("Window removed from desktop background. Triggering re-initialization. Final GameHWnd: %p"), GameHWnd);
+        // 次のTickで ReInitializeIfNeeded が呼ばれ、Initialize が実行されることを期待
+    }
+#else
+    UE_LOG(LogWindowHelper, Log, TEXT("SetAsDesktopBackground: Not supported on this platform."));
+#endif
 }
