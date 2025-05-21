@@ -86,6 +86,116 @@ HWND UWindowTransparencyHelper::GetGameHWnd() const
     UE_LOG(LogWindowHelper, Warning, TEXT("GetGameHWnd: Could not retrieve HWND."));
     return nullptr;
 }
+
+BOOL CALLBACK UWindowTransparencyHelper::EnumWindowsProc(HWND hwnd, LPARAM lParam)
+{
+    EnumWindowsCallbackData* Data = reinterpret_cast<EnumWindowsCallbackData*>(lParam);
+    if (!Data || !Data->WindowsList)
+    {
+        return true; // Continue enumeration
+    }
+
+    // 自身のウィンドウはスキップ
+    if (hwnd == Data->SelfHWnd)
+    {
+        return true; // Continue enumeration
+    }
+
+    // 非表示ウィンドウはスキップ
+    if (!IsWindowVisible(hwnd))
+    {
+        return true;
+    }
+
+    // タイトルがないウィンドウはスキップ（多くのバックグラウンドウィンドウが該当）
+    int TitleLength = GetWindowTextLength(hwnd);
+    if (TitleLength == 0)
+    {
+        return true;
+    }
+
+    // 最小化されているウィンドウはスキップ
+    if (IsIconic(hwnd))
+    {
+        return true;
+    }
+
+    // クラス名を取得してフィルタリング ("Progman" と "WorkerW" を除外)
+    WCHAR ClassName[256];
+    if (GetClassNameW(hwnd, ClassName, sizeof(ClassName) / sizeof(WCHAR)) > 0)
+    {
+        if (wcscmp(ClassName, L"Progman") == 0 || wcscmp(ClassName, L"WorkerW") == 0)
+        {
+            // UE_LOG(LogWindowHelper, Verbose, TEXT("EnumWindowsProc: Skipping Program Manager or WorkerW window (Class: %s, HWND: %p)"), FString(ClassName), hwnd);
+            return true;
+        }
+    }
+
+    // DWMによってクローク(隠蔽)されているウィンドウを除外 (UWPアプリのバックグラウンド状態などに対応)
+    // このチェックはWindows Vista以降で有効
+    BOOL bIsCloaked = false;
+    HRESULT hr = ::DwmGetWindowAttribute(hwnd, DWMWA_CLOAKED, &bIsCloaked, sizeof(bIsCloaked));
+
+    if (SUCCEEDED(hr) && bIsCloaked)
+    {
+        // TCHAR title_debug[256]; GetWindowText(hwnd, title_debug, 255); // For debugging
+        // UE_LOG(LogWindowHelper, Verbose, TEXT("EnumWindowsProc: Skipping cloaked window: %s (HWND: %p)"), FString(title_debug), hwnd);
+        return true; // クロークされているウィンドウはスキップ
+    }
+
+
+    FOtherWindowInfo Info;
+    TCHAR WindowTitleRaw[256]; // TCHAR for wider compatibility with GetWindowText
+    GetWindowText(hwnd, WindowTitleRaw, sizeof(WindowTitleRaw) / sizeof(TCHAR));
+    Info.WindowTitle = FString(WindowTitleRaw);
+
+    RECT Rect;
+    if (GetWindowRect(hwnd, &Rect))
+    {
+        Info.PosX = Rect.left;
+        Info.PosY = Rect.top;
+        Info.Width = Rect.right - Rect.left;
+        Info.Height = Rect.bottom - Rect.top;
+
+        // 幅または高さが0以下のウィンドウは実質的に表示されていないか特殊なものなのでスキップ
+        if (Info.Width <= 0 || Info.Height <= 0)
+        {
+            return true;
+        }
+        Data->WindowsList->Add(Info);
+    }
+    return true; // Continue enumeration
+}
+
+TArray<FOtherWindowInfo> UWindowTransparencyHelper::GetOtherWindowsInformation(bool& bSuccess)
+{
+    bSuccess = false;
+    TArray<FOtherWindowInfo> WindowsList;
+
+    ReInitializeIfNeeded(); // Ensure GameHWnd is valid
+    if (!GameHWnd)
+    {
+        UE_LOG(LogWindowHelper, Warning, TEXT("GetOtherWindowsInformation: GameHWnd is not valid. Cannot determine self."));
+        return WindowsList;
+    }
+
+    EnumWindowsCallbackData CallbackData;
+    CallbackData.WindowsList = &WindowsList;
+    CallbackData.SelfHWnd = GameHWnd; // 自身のウィンドウハンドルを渡す
+
+    if (::EnumWindows(UWindowTransparencyHelper::EnumWindowsProc, reinterpret_cast<LPARAM>(&CallbackData)))
+    {
+        bSuccess = true;
+    }
+    else
+    {
+        DWORD ErrorCode = GetLastError();
+        UE_LOG(LogWindowHelper, Error, TEXT("GetOtherWindowsInformation: EnumWindows failed. Error code: %u"), ErrorCode);
+    }
+
+    return WindowsList;
+}
+
 #endif
 
 void UWindowTransparencyHelper::StoreOriginalWindowStyles()

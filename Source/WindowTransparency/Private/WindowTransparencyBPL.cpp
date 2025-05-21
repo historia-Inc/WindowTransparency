@@ -137,3 +137,31 @@ bool UWindowTransparencyBPL::GetIsMouseOverOpaqueArea(bool& bIsOverOpaqueArea)
     return false;
 #endif
 }
+
+TArray<FOtherWindowInfo> UWindowTransparencyBPL::GetOtherWindowsInfo(bool& bSuccess)
+{
+    bSuccess = false;
+#if PLATFORM_WINDOWS
+    UWindowTransparencyHelper* Helper = FWindowTransparencyModule::GetHelper();
+    if (Helper)
+    {
+        // Ensure helper is initialized as GetOtherWindowsInformation needs the game's HWND
+        if (!Helper->IsInitialized())
+        {
+            if (!Helper->Initialize()) // Attempt to initialize
+            {
+                UE_LOG(LogWindowBPL, Warning, TEXT("GetOtherWindowsInfo: Helper failed to initialize. Cannot get other windows info."));
+                return TArray<FOtherWindowInfo>();
+            }
+        }
+        return Helper->GetOtherWindowsInformation(bSuccess);
+    }
+    else
+    {
+        UE_LOG(LogWindowBPL, Warning, TEXT("GetOtherWindowsInfo: Could not get WindowTransparencyHelper instance."));
+    }
+#else
+    UE_LOG(LogWindowBPL, Log, TEXT("GetOtherWindowsInfo: Not supported on this platform."));
+#endif
+    return TArray<FOtherWindowInfo>();
+}

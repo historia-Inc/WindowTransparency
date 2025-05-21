@@ -65,4 +65,12 @@ public:
     /** Gets the last determined state of whether the mouse is over an 'opaque' area based on hit testing. */
     UFUNCTION(BlueprintPure, Category = "Window Transparency|HitTest", meta = (DisplayName = "Is Mouse Over Opaque Area (HitTest)"))
     static bool GetIsMouseOverOpaqueArea(bool& bIsOverOpaqueArea);
+
+    /**
+     * Gets information about other visible, non-minimized windows on the system.
+     * @param bSuccess Outputs true if the information was successfully retrieved, false otherwise.
+     * @return An array of FOtherWindowInfo structures containing title and geometry for each window.
+     */
+    UFUNCTION(BlueprintCallable, Category = "Window Transparency|External Windows", meta = (DisplayName = "Get Other Windows Info"))
+    static TArray<FOtherWindowInfo> GetOtherWindowsInfo(bool& bSuccess);
 };

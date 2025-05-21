@@ -25,6 +25,30 @@ enum class EWindowHitTestType : uint8
     GameRaycast     UMETA(DisplayName = "Game Raycast")
 };
 
+USTRUCT(BlueprintType)
+struct WINDOWTRANSPARENCY_API FOtherWindowInfo
+{
+    GENERATED_BODY()
+
+    UPROPERTY(BlueprintReadOnly, Category = "Window Info")
+    FString WindowTitle;
+
+    UPROPERTY(BlueprintReadOnly, Category = "Window Info")
+    int32 PosX;
+
+    UPROPERTY(BlueprintReadOnly, Category = "Window Info")
+    int32 PosY;
+
+    UPROPERTY(BlueprintReadOnly, Category = "Window Info")
+    int32 Width;
+
+    UPROPERTY(BlueprintReadOnly, Category = "Window Info")
+    int32 Height;
+
+    FOtherWindowInfo() : PosX(0), PosY(0), Width(0), Height(0) {}
+};
+
+
 UCLASS()
 class WINDOWTRANSPARENCY_API UWindowTransparencyHelper : public UObject, public FTickableGameObject
 {
@@ -45,6 +69,7 @@ public:
 
 #if PLATFORM_WINDOWS
     HWND GetGameHWnd() const;
+    TArray<FOtherWindowInfo> GetOtherWindowsInformation(bool& bSuccess);
 #endif
 
     // --- Hit Test関連の公開メソッド ---
@@ -77,6 +102,13 @@ private:
     LONG_PTR OriginalWindowStyle;
     LONG_PTR OriginalExWindowStyle;
     bool bOriginalStylesStored;
+
+    struct EnumWindowsCallbackData
+    {
+        TArray<FOtherWindowInfo>* WindowsList;
+        HWND SelfHWnd;
+    };
+    static BOOL CALLBACK EnumWindowsProc(HWND hwnd, LPARAM lParam);
 #endif
 
     bool bHitTestingGloballyEnabled;
