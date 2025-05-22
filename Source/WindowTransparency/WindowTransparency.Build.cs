@@ -36,6 +36,9 @@ public class WindowTransparency : ModuleRules
                 "Engine",
                 "Slate",
                 "SlateCore",
+                "ApplicationCore",
+                "InputCore",
+                "ProceduralMeshComponent"
                 // ... add private dependencies here ...
             }
             );

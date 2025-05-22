@@ -7,6 +7,7 @@
 #include "Math/Vector2D.h"
 #include "Tickable.h"
 #include "Engine/EngineTypes.h"
+#include "Widgets/SWindow.h" 
 
 #if PLATFORM_WINDOWS
 #include "Windows/AllowWindowsPlatformTypes.h"
@@ -106,8 +107,8 @@ private:
     LONG_PTR OriginalWindowStyle;
     LONG_PTR OriginalExWindowStyle;
     bool bOriginalStylesStored;
-    HWND DefaultParentHwnd;       // プラグイン初期化時の親ウィンドウハンドル
-    bool bIsDesktopBackgroundActive; // 現在デスクトップ背景モードか
+    HWND DefaultParentHwnd;
+    bool bIsDesktopBackgroundActive;
     HWND TrueOriginalParentHwnd;
     LONG_PTR TrueOriginalWindowStyle;
     LONG_PTR TrueOriginalExWindowStyle;
