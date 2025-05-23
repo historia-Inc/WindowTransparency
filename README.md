@@ -7,6 +7,8 @@ UE5 plugin for creating transparent window backgrounds on Windows (DX11), with d
 
 UE5でウィンドウの背景を透過表示するためのプラグインです。技術ブログによる解説は後日公開予定。
 
+![windowtranspercency2](https://github.com/user-attachments/assets/b6d375cc-7b6d-4801-8afa-19195b8180e7)
+
 ## 主な機能
 
 *   **ウィンドウ透過 (DWM Alpha Transparency):**
