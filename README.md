@@ -54,7 +54,11 @@ Apply the following settings to your project.
     *   In the `Default Settings` section, set `Enable Alpha Channel Support (Post Processing)` to `Allow through tonemapper`. (Note: The original Japanese mentioned `AlphaOutput` to `True`. If that's the precise setting, adjust this. `Enable Alpha Channel Support` is the common one for DWM transparency).
     *   *Correction based on Japanese original:* In the `Default Settings` section, set `AlphaOutput` to `True`.
 
-2.  **Setting `r.D3D11.UseAllowTearing=0`:**
+2.  **Default RHI settings:**
+    * Open `Project Settings` > `Platforms` > `Windows`.
+    * Change the `Default RHI` in the `Targeted RHIs` section to DirectX 11.
+
+3.  **Setting `r.D3D11.UseAllowTearing=0`:**
     *   Open your project's `Config/DefaultEngine.ini` file.
     *   Add or verify the following section and line. This is crucial.
         ```ini
@@ -62,7 +66,7 @@ Apply the following settings to your project.
         r.D3D11.UseAllowTearing=0
         ```
 
-3.  **Custom Stencil Pass (Optional):**
+4.  **Custom Stencil Pass (Optional):**
     *   If you plan to use the stencil buffer to mask parts of the window (as in the `StencilMask_Demo` demo), the following setting is required.
     *   Open `Project Settings > Engine > Rendering`.
     *   In the `Postprocessing` category, set `Custom Depth-Stencil Pass` to `Enabled with Stencil`.

@@ -49,7 +49,11 @@ UE5でウィンドウの背景を透過表示するためのプラグインで�
     *   `プロジェクト設定 (Project Settings)` > `エンジン (Engine)` > `レンダリング (Rendering)` を開きます。
     *   `Default Settings` セクションにある `AlphaOutput` を `True` に設定します。
 
-2.  **r.D3D11.UseAllowTearing=0 の設定:**
+2.  **Default RHIの設定:**
+    * `プロジェクト設定 (Project Settings)` > `プラットフォーム(Platforms)` > `Windows`を開きます。
+    * `Targeted RHIs`セクションにある`Default RHI`をDirectX 11に変更します。
+
+3.  **r.D3D11.UseAllowTearing=0 の設定:**
     *   プロジェクトの `Config/DefaultEngine.ini` ファイルを開きます。
     *   以下のセクションと行を追加または確認してください。これが最も重要です。
         ```ini
@@ -57,7 +61,7 @@ UE5でウィンドウの背景を透過表示するためのプラグインで�
         r.D3D11.UseAllowTearing=0
         ```
 
-3.  **カスタムステンシルパス (任意):**
+4.  **カスタムステンシルパス (任意):**
     *   ステンシルバッファを使用してウィンドウの一部をマスクする場合（デモ `StencilMask_Demo` のようなケース）は、以下の設定が必要です。
     *   `プロジェクト設定 (Project Settings) > エンジン (Engine) > レンダリング (Rendering)` を開きます。
     *   `ポストプロセス (Postprocessing)` カテゴリ内の `カスタム深度ステンシルパス (Custom Depth-Stencil Pass)` 設定を `ステンシル付きで有効 (Enabled with Stencil)` にします。
