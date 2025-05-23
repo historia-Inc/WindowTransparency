@@ -36,7 +36,7 @@ A technical blog post explaining the details will be published at a later date.
 
 ## Installation
 
-1.  Download the latest version of the plugin (Zip file) from the [Releases page](https://github.com/your-repo/WindowTransparency/releases) (<< **UPDATE THIS LINK** if you have one).
+1.  Download the latest version of the plugin (Zip file) from the [Releases page](https://github.com/historia-Inc/WindowTransparency/releases)
 2.  Create a `Plugins` folder in your Unreal Engine project's root folder (if it doesn't already exist).
 3.  Extract the downloaded Zip file and copy the `WindowTransparency` folder into your project's `Plugins` folder.
     (e.g., `YourProject/Plugins/WindowTransparency`)

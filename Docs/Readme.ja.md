@@ -32,7 +32,7 @@ UE5でウィンドウの背景を透過表示するためのプラグインで�
 
 ## インストール
 
-1.  リリースページから最新バージョンのプラグイン (Zipファイル) をダウンロードします。
+1.  [リリースページ](https://github.com/historia-Inc/WindowTransparency/releases)から最新バージョンのプラグイン (Zipファイル) をダウンロードします。
 2.  Unreal Engine プロジェクトのルートフォルダに `Plugins` フォルダを作成します (まだ存在しない場合)。
 3.  ダウンロードした Zip ファイルを展開し、`WindowTransparency` フォルダをプロジェクトの `Plugins` フォルダにコピーします。
     (例: `YourProject/Plugins/WindowTransparency`)
