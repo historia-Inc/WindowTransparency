@@ -1,6 +1,6 @@
 # WindowTransparency
-[![MIT License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![UE Version](https://img.shields.io/badge/UE-5.6-blue.svg)](https://www.unrealengine.com/)
+[![MIT License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![UE Version](https://img.shields.io/badge/UE-5.5+-blue.svg)](https://www.unrealengine.com/)
 [![Platform](https://img.shields.io/badge/Platform-Windows-lightgrey.svg)](#supported-environments)
 
 [日本語 (Japanese)](./Docs/README.ja.md)
@@ -30,7 +30,7 @@ A technical blog post explaining the details will be published at a later date.
 
 ## Requirements
 
-*   Unreal Engine: **UE5.6**
+*   Unreal Engine: **UE5.5, UE5.6**
 *   Operating System: **Windows** (Tested on Windows 11)
 *   Rendering API: **DirectX 11**
 
