@@ -5,7 +5,7 @@
 
 [日本語 (Japanese)](./Docs/README.ja.md)
 
-UE5 plugin for creating transparent window backgrounds on Windows (DX11), with dynamic click-through and borderless support.
+UE5 plugin for creating transparent window backgrounds on Windows (DX11), with dynamic click-through.
 
 A technical blog post explaining the details will be published at a later date.
 
