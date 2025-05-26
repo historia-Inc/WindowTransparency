@@ -70,6 +70,9 @@ Apply the following settings to your project.
     *   Open `Project Settings > Engine > Rendering`.
     *   In the `Postprocessing` category, set `Custom Depth-Stencil Pass` to `Enabled with Stencil`.
 
+## Important Notes
+
+*   **Testing:** The features of this plugin do not work correctly in the Unreal Engine editor's PIE (Play In Editor) mode. Please test by running as a standalone game or using a packaged build.
 
 ## Demos
 
