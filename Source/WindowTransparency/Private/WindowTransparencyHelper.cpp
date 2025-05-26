@@ -72,7 +72,6 @@ UWindowTransparencyHelper::~UWindowTransparencyHelper()
 #if PLATFORM_WINDOWS
 HWND UWindowTransparencyHelper::GetGameHWnd() const
 {
-    // 保持している SWindow から優先的に取得
     if (GameSWindowPtr.IsValid()) {
         TSharedPtr<SWindow> StrongSWindow = GameSWindowPtr.Pin();
         if (StrongSWindow.IsValid() && StrongSWindow->GetNativeWindow().IsValid()) {
@@ -82,7 +81,6 @@ HWND UWindowTransparencyHelper::GetGameHWnd() const
         }
     }
 
-    // SWindow が無効なら従来のロジックで取得し、キャッシュも試みる
     if (GEngine && GEngine->GameViewport && GEngine->GameViewport->GetWindow().IsValid())
     {
         TSharedPtr<SWindow> GameSWindow = GEngine->GameViewport->GetWindow();
@@ -179,7 +177,7 @@ BOOL CALLBACK UWindowTransparencyHelper::EnumWindowsProc(HWND hwnd, LPARAM lPara
         }
         Data->WindowsList->Add(Info);
     }
-    return true; // Continue enumeration
+    return true;
 }
 
 TArray<FOtherWindowInfo> UWindowTransparencyHelper::GetOtherWindowsInformation(bool& bSuccess)
@@ -288,7 +286,7 @@ void UWindowTransparencyHelper::ReInitializeIfNeeded()
 bool UWindowTransparencyHelper::Initialize()
 {
 #if PLATFORM_WINDOWS
-    if (bIsInitialized && GameHWnd && IsWindow(GameHWnd) && !bIsDesktopBackgroundActive) // デスクトップ背景モード中は再評価が必要な場合がある
+    if (bIsInitialized && GameHWnd && IsWindow(GameHWnd) && !bIsDesktopBackgroundActive)
     {
         return true;
     }
@@ -300,10 +298,10 @@ bool UWindowTransparencyHelper::Initialize()
     HWND TempHWnd = GetGameHWnd();
     if (TempHWnd)
     {
-        GameHWnd = TempHWnd; // GameHWnd を設定
+        GameHWnd = TempHWnd;
         bIsInitialized = true;
 
-        if (!bTrueOriginalStateStored) // まだ真のオリジナルが保存されていなければ
+        if (!bTrueOriginalStateStored)
         {
             TrueOriginalWindowStyle = GetWindowLongPtr(GameHWnd, GWL_STYLE);
             TrueOriginalExWindowStyle = GetWindowLongPtr(GameHWnd, GWL_EXSTYLE);
@@ -312,16 +310,13 @@ bool UWindowTransparencyHelper::Initialize()
             UE_LOG(LogWindowHelper, Log, TEXT("Stored TRUE original state. Parent: %p, Style: 0x%p, ExStyle: 0x%p"),
                 TrueOriginalParentHwnd, (void*)TrueOriginalWindowStyle, (void*)TrueOriginalExWindowStyle);
 
-            // 通常のOriginalもこれで初期化
             OriginalWindowStyle = TrueOriginalWindowStyle;
             OriginalExWindowStyle = TrueOriginalExWindowStyle;
             DefaultParentHwnd = TrueOriginalParentHwnd;
-            bOriginalStylesStored = true; // これも true に
+            bOriginalStylesStored = true;
         }
         else if (!bOriginalStylesStored && !bIsDesktopBackgroundActive)
         {
-            // TrueOriginalは保存済みだが、Originalが未保存で、デスクトップ背景モードでない場合
-            // (例: デスクトップ背景解除後の再初期化など)
             OriginalWindowStyle = GetWindowLongPtr(GameHWnd, GWL_STYLE);
             OriginalExWindowStyle = GetWindowLongPtr(GameHWnd, GWL_EXSTYLE);
             DefaultParentHwnd = ::GetParent(GameHWnd);
