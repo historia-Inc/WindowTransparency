@@ -15,8 +15,6 @@ A technical blog post explaining the details will be published at a later date.
 
 *   **Window Transparency (DWM Alpha Transparency):**
     *   Makes the window transparent based on the alpha channel of the rendering result, allowing you to see the desktop or other windows behind it.
-*   **Borderless Window:**
-    *   Hides the window's title bar and borders.
 *   **Click-Through Control:**
     *   **OS-Level Click-Through:** Ignores all mouse input on the window, passing events to the windows behind it.
     *   **Pixel-Based Click-Through (Hit-Testing):** Determines in real-time whether there is UE content (3D objects or UI widgets) under the mouse cursor, and only allows click-through in transparent areas where there is no UE content.
