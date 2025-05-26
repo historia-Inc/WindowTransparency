@@ -5,11 +5,12 @@
 
 [日本語 (Japanese)](./Docs/README.ja.md)
 
+
+![windowtranspercency2](https://github.com/user-attachments/assets/b6d375cc-7b6d-4801-8afa-19195b8180e7)
+
 UE5 plugin for creating transparent window backgrounds on Windows (DX11), with dynamic click-through.
 
 A technical blog post explaining the details will be published at a later date.
-
-![windowtranspercency2](https://github.com/user-attachments/assets/b6d375cc-7b6d-4801-8afa-19195b8180e7)
 
 ## Features
 

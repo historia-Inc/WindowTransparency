@@ -3,9 +3,10 @@
 [![UE Version](https://img.shields.io/badge/UE-5.5+-blue.svg)](https://www.unrealengine.com/)
 [![Platform](https://img.shields.io/badge/Platform-Windows-lightgrey.svg)](#supported-environments)
 
-UE5でウィンドウの背景を透過表示するためのプラグインです。技術ブログによる解説は後日公開予定。
 
 ![windowtranspercency2](https://github.com/user-attachments/assets/b6d375cc-7b6d-4801-8afa-19195b8180e7)
+
+UE5でウィンドウの背景を透過表示するためのプラグインです。技術ブログによる解説は後日公開予定。
 
 ## 主な機能
 
@@ -21,6 +22,7 @@ UE5でウィンドウの背景を透過表示するためのプラグインで�
     *   UEウィンドウをデスクトップの壁紙のように表示します (Windows の `WorkerW` ウィンドウにペアレントします)。
 *   **外部ウィンドウ情報取得:**
     *   システム上で表示されている他のウィンドウのタイトル、位置、サイズなどの情報を取得します。
+
 
 ## 要件
 
