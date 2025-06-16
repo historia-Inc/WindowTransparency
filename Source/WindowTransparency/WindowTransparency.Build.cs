@@ -45,7 +45,7 @@ public class WindowTransparency : ModuleRules
 
         if (Target.Platform == UnrealTargetPlatform.Win64)
         {
-            PublicAdditionalLibraries.Add("Dwmapi.lib"); // DWMAPI module should handle this
+            PublicSystemLibraries.Add("Dwmapi.lib");
         }
 
 
