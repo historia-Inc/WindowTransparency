@@ -815,8 +815,9 @@ bool UWindowTransparencyHelper::PerformGameRaycastUnderMouse(FVector2D MousePosI
             TArray<TSharedRef<SWindow>> WindowsToSearch;
             WindowsToSearch.Add(GameSWindow.ToSharedRef());
 
+            FVector2D MousePosScreen = MousePosInWindow + GEngine->GameViewport->GetGameViewportWidget()->GetCachedGeometry().GetAbsolutePosition();
             FWidgetPath WidgetPath = FSlateApplication::Get().LocateWindowUnderMouse(
-                MousePosInWindow,
+                MousePosScreen,
                 WindowsToSearch,
                 false, /*bAllowDisabledWidgets*/
                 PC->GetLocalPlayer() ? PC->GetLocalPlayer()->GetControllerId() : 0
