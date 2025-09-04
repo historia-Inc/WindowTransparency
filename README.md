@@ -10,7 +10,7 @@
 
 UE5 plugin for creating transparent window backgrounds on Windows (DX11), with dynamic click-through.
 
-A technical blog post explaining the details will be published at a later date.
+For an explanation via our technical blog, see here. (Japanese) [https://historia.co.jp/archives/50391/](https://historia.co.jp/archives/50391/)
 
 ## Features
 
