@@ -6,7 +6,9 @@
 
 ![windowtranspercency2](https://github.com/user-attachments/assets/b6d375cc-7b6d-4801-8afa-19195b8180e7)
 
-UE5でウィンドウの背景を透過表示するためのプラグインです。技術ブログによる解説は後日公開予定。
+UE5でウィンドウの背景を透過表示するためのプラグインです。
+
+技術ブログによる解説はこちら：[https://historia.co.jp/archives/50391/](https://historia.co.jp/archives/50391/)
 
 ## 主な機能
 
