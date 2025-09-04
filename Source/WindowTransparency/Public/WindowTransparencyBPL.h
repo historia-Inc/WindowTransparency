@@ -75,6 +75,15 @@ public:
     static TArray<FOtherWindowInfo> GetOtherWindowsInfo(bool& bSuccess);
 
     /**
+    * Gets information about the current game window (position and size on the screen).
+    * Useful for calculating the relative position of other windows.
+    * @param bSuccess Outputs true if the information was successfully retrieved, false otherwise.
+    * @return A FCurrentWindowInfo structure containing the geometry for the game window.
+    */
+    UFUNCTION(BlueprintCallable, Category = "Window Transparency|External Windows", meta = (DisplayName = "Get Current Game Window Info"))
+    static FOtherWindowInfo GetCurrentGameWindowInfo(bool& bSuccess);
+
+    /**
      * Sets or unsets the game window as a desktop background.
      * When set, the window will be parented to the desktop's WorkerW, made borderless and click-through.
      * @param bEnable True to set as desktop background, false to restore.

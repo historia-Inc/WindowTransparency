@@ -209,6 +209,37 @@ TArray<FOtherWindowInfo> UWindowTransparencyHelper::GetOtherWindowsInformation(b
     return WindowsList;
 }
 
+FOtherWindowInfo UWindowTransparencyHelper::GetCurrentWindowInfo(bool& bSuccess)
+{
+    bSuccess = false;
+    FOtherWindowInfo CurrentInfo;
+
+    ReInitializeIfNeeded();
+    if (!IsInitialized() || !GameHWnd)
+    {
+        UE_LOG(LogWindowHelper, Warning, TEXT("GetCurrentWindowInfo: Not initialized or HWND is null."));
+        return CurrentInfo;
+    }
+
+    RECT WindowRect;
+    if (::GetWindowRect(GameHWnd, &WindowRect))
+    {
+        CurrentInfo.PosX = WindowRect.left;
+        CurrentInfo.PosY = WindowRect.top;
+        CurrentInfo.Width = WindowRect.right - WindowRect.left;
+        CurrentInfo.Height = WindowRect.bottom - WindowRect.top;
+        CurrentInfo.WindowHandleStr = FString::Printf(TEXT("%llu"), reinterpret_cast<uint64>(GameHWnd));
+        bSuccess = true;
+    }
+    else
+    {
+        DWORD ErrorCode = GetLastError();
+        UE_LOG(LogWindowHelper, Error, TEXT("GetCurrentWindowInfo: GetWindowRect failed for HWND %p. Error code: %u"), GameHWnd, ErrorCode);
+    }
+
+    return CurrentInfo;
+}
+
 #endif
 
 void UWindowTransparencyHelper::StoreOriginalWindowStyles()

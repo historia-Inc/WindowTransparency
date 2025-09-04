@@ -75,6 +75,7 @@ public:
 #if PLATFORM_WINDOWS
     HWND GetGameHWnd() const;
     TArray<FOtherWindowInfo> GetOtherWindowsInformation(bool& bSuccess);
+    FOtherWindowInfo GetCurrentWindowInfo(bool& bSuccess);
 #endif
 
     // --- Hit Test関連の公開メソッド ---

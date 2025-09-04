@@ -166,6 +166,33 @@ TArray<FOtherWindowInfo> UWindowTransparencyBPL::GetOtherWindowsInfo(bool& bSucc
     return TArray<FOtherWindowInfo>();
 }
 
+FOtherWindowInfo UWindowTransparencyBPL::GetCurrentGameWindowInfo(bool& bSuccess)
+{
+    bSuccess = false;
+#if PLATFORM_WINDOWS
+    UWindowTransparencyHelper* Helper = FWindowTransparencyModule::GetHelper();
+    if (Helper)
+    {
+        if (!Helper->IsInitialized())
+        {
+            if (!Helper->Initialize())
+            {
+                UE_LOG(LogWindowBPL, Warning, TEXT("GetCurrentGameWindowInfo: Helper failed to initialize. Cannot get current window info."));
+                return FOtherWindowInfo();
+            }
+        }
+        return Helper->GetCurrentWindowInfo(bSuccess);
+    }
+    else
+    {
+        UE_LOG(LogWindowBPL, Warning, TEXT("GetCurrentGameWindowInfo: Could not get WindowTransparencyHelper instance."));
+    }
+#else
+    UE_LOG(LogWindowBPL, Log, TEXT("GetCurrentGameWindowInfo: Not supported on this platform."));
+#endif
+    return FOtherWindowInfo();
+}
+
 void UWindowTransparencyBPL::SetWindowAsDesktopBackground(bool bEnable)
 {
 #if PLATFORM_WINDOWS
