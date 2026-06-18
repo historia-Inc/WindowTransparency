@@ -2,6 +2,7 @@
 #include "WindowTransparencyHelper.h"
 #include "CoreGlobals.h"
 #include "Engine/Engine.h"
+#include "UObject/UObjectBase.h" // UObjectInitialized() — guards shutdown against the exit-time UObject teardown
 
 DEFINE_LOG_CATEGORY_STATIC(LogWindowTransparency, Log, All);
 
@@ -18,6 +19,9 @@ void FWindowTransparencyModule::StartupModule()
         HelperInstance = NewObject<UWindowTransparencyHelper>();
         if (HelperInstance)
         {
+            // Root the helper so it isn't garbage-collected before ShutdownModule runs (mirrors the
+            // AddToRoot() already done in GetHelper()'s lazy-init path).
+            HelperInstance->AddToRoot();
             if (HelperInstance->Initialize())
             {
                 UE_LOG(LogWindowTransparency, Log, TEXT("UWindowTransparencyHelper instance created and initialized."));
@@ -41,18 +45,27 @@ void FWindowTransparencyModule::ShutdownModule()
 {
     UE_LOG(LogWindowTransparency, Log, TEXT("WindowTransparency module is shutting down."));
 
-    if (IsValid(HelperInstance))
+    // On engine exit the UObject system is torn down (AppPreExit -> StaticExit purges ALL objects, even
+    // rooted ones, then sets UObjectInitialized() = false) BEFORE modules are unloaded
+    // (LaunchEngineLoop.cpp calls AppPreExit() well before FModuleManager::UnloadModulesAtShutdown()).
+    // So by the time this runs on exit, HelperInstance points at a freed object; calling IsValid() on it
+    // reads a negative internal index and asserts (FUObjectArray::IndexToObject "Index >= 0"; fatal on
+    // UE 5.x). Guarding on UObjectInitialized() skips that dangling access on exit (it's false once
+    // StaticExit() has run), while still restoring the window on a live module unload / hot reload.
+    if (UObjectInitialized() && IsValid(HelperInstance))
     {
 #if PLATFORM_WINDOWS
         UE_LOG(LogWindowTransparency, Log, TEXT("HelperInstance is valid, attempting to restore settings."));
         HelperInstance->RestoreDefaultWindowSettings();
+        HelperInstance->RemoveFromRoot(); // balance the AddToRoot() from StartupModule
 #endif
     }
     else
     {
-        UE_LOG(LogWindowTransparency, Log, TEXT("HelperInstance was not valid or not set at ShutdownModule."));
+        UE_LOG(LogWindowTransparency, Log, TEXT("HelperInstance not valid / object system already shut down at ShutdownModule."));
     }
 
+    HelperInstance = nullptr;
     UE_LOG(LogWindowTransparency, Log, TEXT("WindowTransparency module shutdown sequence finished."));
 }
 
