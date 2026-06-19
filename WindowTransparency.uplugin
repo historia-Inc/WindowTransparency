@@ -1,7 +1,7 @@
 {
 	"FileVersion": 3,
-	"Version": 1,
-	"VersionName": "1.0",
+	"Version": 2,
+	"VersionName": "1.2",
 	"FriendlyName": "WindowTransparency",
 	"Description": "UE5 plugin for creating transparent window backgrounds on Windows (DX11), with dynamic click-through",
 	"Category": "Other",
